@@ -1,11 +1,12 @@
 import os, sys, shutil
 import subprocess, io
 import time
+from filecmp import dircmp
 
 
 dir = 'data/bin_4obs'
 encodefile = 'out/encoded.bin'
-unzipdir = 'out/unzip/'
+unzipdir = 'out/unzip'
 defaultfile = 'data/bin_4obs.tar.bz2'
 
 
@@ -23,7 +24,7 @@ def test_encode():
     print('{:.3f} s / {:.1f} MB / {:.2%}'.format(elapsed, size / 1024 / 1024, compression))
 
 def encode():
-    files = os.listdir(dir)
+    files = os.listdir(dir) #[:4]
     filelist = [file + ' ' + str(os.path.getsize(dir + '/' + file)) for file in files]
 
     input = '\n'.join(['encode', encodefile, dir, str(len(files))])
@@ -35,24 +36,42 @@ def encode():
 
 def test_decode():
     if os.path.exists(unzipdir): shutil.rmtree(unzipdir)
+    os.mkdir(unzipdir)
     
     t1 = time.time()
     decode()
     elapsed = time.time() - t1
     print('{:.3f} s'.format(elapsed))
 
-    # check decoded files
+    check_decoded()
 
 def decode():
     input = '\n'.join(['decode', encodefile, unzipdir]) + '\n'
     proc = subprocess.run(['python3', 'main.py'], input=input, encoding='ascii')
 
 
+def check_decoded():
+    dcmp = dircmp(dir, unzipdir)
+    if len(dcmp.left_only) + len(dcmp.right_only) + len(dcmp.diff_files) == 0:
+        print("ok")
+
+    else:
+        print("left", dcmp.left_only, "right", dcmp.right_only)
+        print("diff", dcmp.diff_files)
+
 if __name__ == '__main__':
-    if sys.argv[1] == 'decode':
-        test_decode()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'encode':
+            test_encode()
+
+        elif sys.argv[1] == 'decode':
+            test_decode()
+
+        elif sys.argv[1] == 'check':
+            check_decoded()
 
     else:
         test_encode()
+        test_decode()
 
 
