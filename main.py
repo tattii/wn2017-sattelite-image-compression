@@ -6,7 +6,7 @@ def encode():
     N = int(input())
     files = [input().split()[0] for _ in range(N)] # filename filesize
 
-    with zipfile.ZipFile(encodefile, 'w', zipfile.ZIP_DEFLATED) as zf:
+    with zipfile.ZipFile(encodefile, 'w', zipfile.ZIP_BZIP2) as zf:
         for name in files:
             zf.write(directory + '/' + name, name)
 

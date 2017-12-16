@@ -20,7 +20,7 @@ def test_encode():
     defaultsize = os.path.getsize(defaultfile)
     compression = 1- size / defaultsize
 
-    print('{:.3f} s / {:.1f} MB / {:.2%} %'.format(elapsed, size / 1024 / 1024, compression))
+    print('{:.3f} s / {:.1f} MB / {:.2%}'.format(elapsed, size / 1024 / 1024, compression))
 
 def encode():
     files = os.listdir(dir)
