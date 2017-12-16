@@ -1,4 +1,4 @@
-import zlib
+import zlib, bz2
 import struct
 
 def encode():
@@ -17,7 +17,8 @@ def encode_files(encodefile, directory, files):
 
 def encode_file(directory, file):
     with open(directory + '/' + file, 'rb') as f:
-        data = zlib.compress(f.read(), level=-1)
+        #data = zlib.compress(f.read(), level=-1)
+        data = bz2.compress(f.read())
     
         header = struct.pack('B', len(file)) + file.encode('utf-8') + struct.pack('I', len(data))
         return header + data
@@ -39,10 +40,9 @@ def decode_files(encodefile, directory):
 def decode_file(directory, f, h):
     filename_size = struct.unpack('B', h)[0]
     filename = f.read(filename_size).decode('utf-8')
-    print(filename)
 
     data_size = struct.unpack('I', f.read(4))[0]
-    data = zlib.decompress(f.read(data_size))
+    data = bz2.decompress(f.read(data_size))
 
     with open(directory + '/' + filename, 'wb') as out:
         out.write(data)
