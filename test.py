@@ -10,11 +10,11 @@ unzipdir = 'out/unzip'
 defaultfile = 'data/bin_4obs.tar.bz2'
 
 
-def test_encode():
+def test_encode(min=False):
     if os.path.exists(encodefile): os.remove(encodefile)
 
     t1 = time.time()
-    encode()
+    encode(min)
     elapsed = time.time() - t1
 
     size = os.path.getsize(encodefile)
@@ -23,8 +23,9 @@ def test_encode():
 
     print('{:.3f} s / {:.1f} MB / {:.2%}'.format(elapsed, size / 1024 / 1024, compression))
 
-def encode():
-    files = os.listdir(dir) #[:4]
+def encode(min):
+    files = os.listdir(dir)
+    if min: files = files[:4]
     filelist = [file + ' ' + str(os.path.getsize(dir + '/' + file)) for file in files]
 
     input = '\n'.join(['encode', encodefile, dir, str(len(files))])
@@ -62,7 +63,10 @@ def check_decoded():
 if __name__ == '__main__':
     if len(sys.argv) > 1:
         if sys.argv[1] == 'encode':
-            test_encode()
+            if len(sys.argv) > 2:
+                test_encode(True) # min test
+            else:
+                test_encode()
 
         elif sys.argv[1] == 'decode':
             test_decode()
