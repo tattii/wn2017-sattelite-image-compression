@@ -26,27 +26,27 @@ def encode_files(encodefile, directory, files):
             else:
                 t += 1
 
-            print(band, t)
+            #print(band, t)
             f.write(encode_file(directory, file, band, t))
         
 
 def encode_file(directory, file, band, t):
     array = load_array(directory + '/' + file)
 
-    print(array)
-    print(array.min(), array.max())
+    #print(array)
+    #print(array.min(), array.max())
     
-    array32 = array.astype(np.int32)
-
-    compressed = compress(array32)
+    compressed = compress(array)
 
     header = struct.pack('B', len(file)) + file.encode('utf-8')
-    return header + struct.pack('I', len(compressed)) + compressed
+    return header + compressed
 
 
 def load_array(file):
-    array = np.fromfile(file, dtype=np.uint16)
+    array = np.fromfile(file, dtype=np.int16)
+    return reshape_array(array)
 
+def reshape_array(array):
     # reshape  3 types
     if array.size == 3750000:
         array = np.reshape(array, (1500, 2500))
@@ -60,29 +60,33 @@ def load_array(file):
     return array
 
 
-def compress(array32):
-    delta = delta_array(array32)
-    #return zlib.compress(delta.tostring(), level=-1)
-    return bz2.compress(delta.tobytes())
+def compress(array):
+    delta = delta_array(array)
+    
+    delta1 = delta.astype(np.uint8)
+    delta2 = np.right_shift(delta, 8).astype(np.uint8)
+
+    #print(delta1)
+    #print(delta2)
+
+    return block(delta1) + block(delta2)
+    
+def block(d):
+    #zlib.compress(delta.tostring(), level=-1)
+    compressed = bz2.compress(d.tobytes())
+    return struct.pack('I', len(compressed)) + compressed
 
 
 def delta_array(array):
-    # shift arrays
-    A = np.roll(array, (1, 1), axis=(0, 1))
-    A[0, :] = 0
-    A[:, 0] = 0
-
-    B = np.roll(array, 1, axis=0)
-    B[0, :] = 0
+    # shift down array
+    down = np.roll(array, 1, axis=0)
+    down[0, :] = 0
     
-    C = np.roll(array, 1, axis=1)
-    C[:, 0] = 0
+    delta = array - down + 128
+    #print(delta)
+    #print(delta.min(), delta.max())
 
-    delta = array + A - B - C
-    print(delta)
-    print(delta.min(), delta.max())
-
-    return delta.astype(np.int16)
+    return delta
 
 
 def diff(array):
@@ -115,11 +119,38 @@ def decode_file(directory, f, h):
     filename_size = struct.unpack('B', h)[0]
     filename = f.read(filename_size).decode('utf-8')
 
-    data_size = struct.unpack('I', f.read(4))[0]
-    data = bz2.decompress(f.read(data_size))
+    array1 = read_block(f)
+    array2 = read_block(f)
+
+    array = array1.astype(np.uint16)
+    array2 = array2.astype(np.uint16)
+    array += np.left_shift(array2, 8)
+
+
+    array = array.astype(np.int16)
+    delta = reshape_array(array)
+
+    decoded = reverse_delta(delta)
+
+    data = decoded.tobytes()
 
     with open(directory + '/' + filename, 'wb') as out:
         out.write(data)
+    
+def read_block(f):
+    size = struct.unpack('I', f.read(4))[0]
+    data = bz2.decompress(f.read(size))
+    return np.fromstring(data, dtype=np.uint8)
+
+def reverse_delta(delta):
+    delta -= 128
+
+    for i in range(1, delta.shape[0]):
+        delta[i, :] += delta[i-1, :]
+
+    #print(delta)
+
+    return delta
 
 
 command = input()
