@@ -14,23 +14,13 @@ def encode():
 
 def encode_files(encodefile, directory, files):
     files.sort()
-    prev_band = None
-    t = 0
 
     with open(encodefile, 'wb') as f:
         for file in files:
-            band = int(file[19:21])
-            if band != prev_band:
-                prev_band = band
-                t = 0
-            else:
-                t += 1
-
-            #print(band, t)
-            f.write(encode_file(directory, file, band, t))
+            f.write(encode_file(directory, file))
         
 
-def encode_file(directory, file, band, t):
+def encode_file(directory, file):
     array = load_array(directory + '/' + file)
 
     #print(array)
@@ -73,7 +63,7 @@ def compress(array):
     
 def block(d):
     #zlib.compress(delta.tostring(), level=-1)
-    compressed = bz2.compress(d.tobytes())
+    compressed = bz2.compress(d.tostring())
     return struct.pack('I', len(compressed)) + compressed
 
 
@@ -132,7 +122,7 @@ def decode_file(directory, f, h):
 
     decoded = reverse_delta(delta)
 
-    data = decoded.tobytes()
+    data = decoded.tostring()
 
     with open(directory + '/' + filename, 'wb') as out:
         out.write(data)
