@@ -16,17 +16,21 @@ def encode_files(encodefile, directory, files):
     files.sort()
 
     with open(encodefile, 'wb') as f:
-        for file in files:
-            f.write(encode_file(directory, file))
+        for i, file in enumerate(files):
+            f.write(encode_file(directory, file, i % 4))
         
 
-def encode_file(directory, file):
+def encode_file(directory, file, t):
     array = load_array(directory + '/' + file)
 
     #print(array)
     #print(array.min(), array.max())
+
+    diff = diff_array(array, t)
+    #print(diff)
+    #print(diff.min(), diff.max())
     
-    compressed = compress(array)
+    compressed = compress(diff)
 
     header = struct.pack('B', len(file)) + file.encode('utf-8')
     return header + compressed
@@ -79,17 +83,16 @@ def delta_array(array):
     return delta
 
 
-def diff(array):
+def diff_array(array, t):
     global prev_array
-    array32 = array.astype(np.int32)
     if t > 0:
-        diff = array32 - prev_array
+        diff = array - prev_array
     else:
-        diff = array32
+        diff = array
 
-    prev_array = array32
-    print(diff)
+    prev_array = array
 
+    return diff
 
 def decode():
     encodefile = input()
@@ -98,14 +101,15 @@ def decode():
     decode_files(encodefile, directory)
 
 def decode_files(encodefile, directory):
+    count = 0
     with open(encodefile, 'rb') as f:
         while True:
             h = f.read(1)
             if not h: break
-            decode_file(directory, f, h)
-        
+            decode_file(directory, f, h, count)
+            count += 1
 
-def decode_file(directory, f, h):
+def decode_file(directory, f, h, count):
     filename_size = struct.unpack('B', h)[0]
     filename = f.read(filename_size).decode('utf-8')
 
@@ -116,11 +120,11 @@ def decode_file(directory, f, h):
     array2 = array2.astype(np.uint16)
     array += np.left_shift(array2, 8)
 
-
     array = array.astype(np.int16)
     delta = reshape_array(array)
 
-    decoded = reverse_delta(delta)
+    diff = reverse_delta(delta)
+    decoded = add_array(diff, count % 4) 
 
     data = decoded.tostring()
 
@@ -141,6 +145,18 @@ def reverse_delta(delta):
     #print(delta)
 
     return delta
+
+def add_array(diff, t):
+    global prev_array
+    if t > 0:
+        array = diff + prev_array
+    else:
+        array = diff
+
+    prev_array = array
+
+    return array
+    
 
 
 command = input()
