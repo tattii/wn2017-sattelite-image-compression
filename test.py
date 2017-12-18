@@ -32,10 +32,10 @@ def encode(min):
     input += '\n' + '\n'.join(filelist) + '\n'
 
     print(input)
-    proc = subprocess.run(['python3', 'main.py'], input=input, encoding='ascii')
+    proc = subprocess.check_output('echo "' + input + '" | python3 main.py', shell=True)
 
 
-def test_decode():
+def test_decode(min=None):
     if os.path.exists(unzipdir): shutil.rmtree(unzipdir)
     os.mkdir(unzipdir)
     
@@ -44,21 +44,27 @@ def test_decode():
     elapsed = time.time() - t1
     print('{:.3f} s'.format(elapsed))
 
-    check_decoded()
+    check_decoded(min)
 
 def decode():
     input = '\n'.join(['decode', encodefile, unzipdir]) + '\n'
-    proc = subprocess.run(['python3', 'main.py'], input=input, encoding='ascii')
+    proc = subprocess.check_output('echo "' + input + '" | python3 main.py', shell=True)
 
 
-def check_decoded():
+def check_decoded(min):
     dcmp = dircmp(dir, unzipdir)
+    if min:
+        print("right", dcmp.right_only)
+        print("diff", dcmp.diff_files)
+        return
+
     if len(dcmp.left_only) + len(dcmp.right_only) + len(dcmp.diff_files) == 0:
         print("ok")
 
     else:
         print("left", dcmp.left_only, "right", dcmp.right_only)
         print("diff", dcmp.diff_files)
+
 
 if __name__ == '__main__':
     if len(sys.argv) > 1:
@@ -69,7 +75,10 @@ if __name__ == '__main__':
                 test_encode()
 
         elif sys.argv[1] == 'decode':
-            test_decode()
+            if len(sys.argv) > 2:
+                test_decode(True) # min test
+            else:
+                test_decode()
 
         elif sys.argv[1] == 'check':
             check_decoded()
