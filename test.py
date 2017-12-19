@@ -32,7 +32,7 @@ def encode(min):
     input += '\n' + '\n'.join(filelist) + '\n'
 
     print(input)
-    proc = subprocess.check_output('echo "' + input + '" | python3 main.py', shell=True)
+    proc = subprocess.call('echo "' + input + '" | python3 main.py', shell=True)
 
 
 def test_decode(min=None):
@@ -48,7 +48,7 @@ def test_decode(min=None):
 
 def decode():
     input = '\n'.join(['decode', encodefile, unzipdir]) + '\n'
-    proc = subprocess.check_output('echo "' + input + '" | python3 main.py', shell=True)
+    proc = subprocess.call('echo "' + input + '" | python3 main.py', shell=True)
 
 
 def check_decoded(min):
