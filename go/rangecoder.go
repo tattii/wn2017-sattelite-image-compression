@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"encoding/binary"
-//	"reflect" // debug
 )
 
 const MAX_RANGE uint32 = 0xffffffff
@@ -40,6 +39,7 @@ func encode(array []uint16, out *os.File){
 	encoder := &Encoder{}
 	encoder.init(out)
 	encoder.init_count_table(count)
+	encoder.write_count_table()
 
 	for _, x := range array {
 		encoder.encode(x)
@@ -66,10 +66,12 @@ type Encoder struct {
 	count_sum []uint32
 	count_all float64
 }
+
 func (p *Encoder) init(file *os.File){
 	p.file = file
 	p.rng = MAX_RANGE
 }
+
 func (p *Encoder) init_count_table(count []uint32){
 	var max uint32
 	var maxi int
@@ -82,8 +84,9 @@ func (p *Encoder) init_count_table(count []uint32){
 		}
 	}
 	fmt.Println(max, maxi)
+	counts := count[:maxi + 1]
 
-	p.count = make([]uint16, 256 * 256)
+	p.count = make([]uint16, len(counts))
 
 	// create uint16 count table
 	if max > 0xffff {
@@ -94,27 +97,35 @@ func (p *Encoder) init_count_table(count []uint32){
 			n += 1
 		}
 
-		for i, x := range count {
+		for i, x := range counts {
 			if x != 0 {
 				p.count[i] = uint16((x >> n) | 1)
 			}
 		}
 
 	}else{
-		for i, x := range count {
+		for i, x := range counts {
 			p.count[i] = uint16(x)
 		}
 	}
 
 	// sum count
-	p.count_sum = make([]uint32, 256 * 256 + 1)
+	p.count_sum = make([]uint32, len(counts) + 1)
 	for i, x := range p.count {
 		p.count_sum[i + 1] = p.count_sum[i] + uint32(x)
 	}
 	p.count_all = float64(p.count_sum[len(p.count_sum) - 1])
 
-	fmt.Println("count_all", p.count_all)
+	if p.count_sum[len(p.count_sum) - 1] > MIN_RANGE {
+		fmt.Println("count_all > MIN_RANGE")
+	}
 }
+
+func (p *Encoder) write_count_table(){
+	binary.Write(p.file, binary.LittleEndian, uint16(len(p.count)))
+	binary.Write(p.file, binary.LittleEndian, p.count)
+}
+
 func (p *Encoder) encode(c uint16){
 	temp := float64(p.rng) / p.count_all
 	p.low += uint32(float64(p.count_sum[c]) * temp)
@@ -157,6 +168,7 @@ func (p *Encoder) normalize(){
 		p.rng <<= 8
 	}
 }
+
 func (p *Encoder) finish(){
 	var c uint8 = 0xff
 	if p.low >= MAX_RANGE {
@@ -170,6 +182,7 @@ func (p *Encoder) finish(){
 
 	binary.Write(p.file, binary.LittleEndian, p.low)
 }
+
 func (p *Encoder) puti(i uint8){
 	binary.Write(p.file, binary.LittleEndian, i)
 }
