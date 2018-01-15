@@ -1,4 +1,6 @@
 import time, sys, getopt, os.path
+import numpy as np
+import struct
 
 ENCODE = "encode"
 DECODE = "decode"
@@ -20,13 +22,16 @@ def putc(f, x):
 
 #
 class RangeCoder:
-    def __init__(self, file, mode):
+    def __init__(self, file, mode, inputsize):
         self.file = file
         self.range = MAX_RANGE
         self.buff = 0
         self.cnt = 0
         if mode == ENCODE:
             self.low = 0
+            self.array = np.empty(inputsize, dtype=np.uint8)
+            self.size = 0
+
         elif mode == DECODE:
             # buff の初期値 (0) を読み捨てる
             getc(self.file)
@@ -38,6 +43,10 @@ class RangeCoder:
         else:
             raise "RangeCoder mode error"
 
+    def puti(self, x):
+        self.array[self.size] = x
+        self.size += 1
+
     # 符号化の正規化
     def encode_normalize(self):
         if self.low >= MAX_RANGE:
@@ -45,14 +54,15 @@ class RangeCoder:
             self.buff += 1
             self.low &= MASK
             if self.cnt > 0:
-                putc(self.file, self.buff)
-                for _ in range(self.cnt - 1): putc(self.file, 0)
+                self.puti(self.buff)
+                for _ in range(self.cnt - 1): self.puti(0)
                 self.buff = 0
                 self.cnt = 0
+
         while self.range < MIN_RANGE:
             if self.low < (0xff << SHIFT):
-                putc(self.file, self.buff)
-                for _ in range(self.cnt): putc(self.file, 0xff)
+                self.puti(self.buff)
+                for _ in range(self.cnt): self.puti(0xff)
                 self.buff = (self.low >> SHIFT) & 0xff
                 self.cnt = 0
             else:
@@ -77,47 +87,38 @@ class RangeCoder:
             # 桁上がり
             self.buff += 1
             c = 0
-        putc(self.file, self.buff)
-        for _ in range(self.cnt): putc(self.file, c)
-        #
-        putc(self.file, (self.low >> 24) & 0xff)
-        putc(self.file, (self.low >> 16) & 0xff)
-        putc(self.file, (self.low >> 8) & 0xff)
-        putc(self.file, self.low & 0xff)
+        self.puti(self.buff)
+        for _ in range(self.cnt): self.puti(c)
+
+        # write file
+        d = self.array[:self.size + 1].tostring()
+        last_low = struct.pack('I', self.low)
+        self.file.write(d + last_low)
 
 
 # 出現頻度表
 class Freq:
     def __init__(self, count):
-        size = len(count)
-        self.size = size
-        m = max(count)
+        m = count.max()
+
         # 2 バイトに収める
         if m > 0xffff:
-            self.count = [0] * size
-            n = 0
-            while m > 0xffff:
-                m >>= 1
-                n += 1
-            for x in range(size):
-                if count[x] != 0:
-                    self.count[x] = (count[x] >> n) | 1
-        else:
-            self.count = count[:]
-        self.count_sum = [0] * (size + 1)
-        # 累積度数表
-        for x in range(size):
-            self.count_sum[x + 1] = self.count_sum[x] + self.count[x]
+            n = int(m).bit_length() - 16
+            count = np.where(count == 0, count, (count >> n) | 1)
 
-    #
+        self.count = count
+        self.count_sum = np.cumsum(count) # 累積度数表
+        self.count_all = self.count_sum[count.size - 1]
+
     def write_count_table(self, fout):
-        for x in self.count:
-            putc(fout, x >> 8)
-            putc(fout, x & 0xff)
+        length = struct.pack('B', self.count.size - 1)
+        table = self.count.astype(np.uint16).tostring()
+        fout.write(length + table)
+
     
     # 符号化
     def encode(self, rc, c):
-        temp = int(rc.range / self.count_sum[self.size])
+        temp = int(rc.range / self.count_all)
         rc.low += self.count_sum[c] * temp
         rc.range = self.count[c] * temp
         rc.encode_normalize()
@@ -151,15 +152,14 @@ def read_file(fin):
         yield c
 
 # レンジコーダによる符号化
-def encode(fin, fout):
-    count = [0] * 256
-    for x in read_file(fin):
-        count[x] += 1
-    rc = RangeCoder(fout, ENCODE)
+def encode(array, fout):
+    count = np.bincount(array)
+
+    rc = RangeCoder(fout, ENCODE, array.size)
     freq = Freq(count)
     freq.write_count_table(fout)
-    fin.seek(0)
-    for x in read_file(fin):
+    
+    for x in np.nditer(array):
         freq.encode(rc, x)
     rc.finish()
 
@@ -177,19 +177,21 @@ def decode(fin, fout, size):
     for _ in range(size):
         putc(fout, freq.decode(rc))
 
+
+def readfile(file):
+    return np.fromfile(file, dtype=np.uint8)
+
 # 符号化
 def encode_file(name1, name2):
-    size = os.path.getsize(name1)
-    infile = open(name1, "rb")
-    outfile = open(name2, "wb")
-    putc(outfile, (size >> 24) & 0xff)
-    putc(outfile, (size >> 16) & 0xff)
-    putc(outfile, (size >> 8) & 0xff)
-    putc(outfile, size & 0xff)
+    array = readfile(name1)
+    size = array.size
     print(size)
-    if size > 0: encode(infile, outfile)
-    infile.close()
-    outfile.close()
+    if size <= 0: return
+
+    with open(name2, "wb") as outfile:
+        outfile.write(struct.pack('I', size))
+        encode(array, outfile)
+
 
 # 復号
 def decode_file(name1, name2):
